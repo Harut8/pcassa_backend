@@ -1,0 +1,123 @@
+version: "3.0"
+
+services:
+  rabbit:
+    hostname: rabbit
+    container_name: rabbit
+    image: rabbitmq:3-management
+    volumes:
+      - rabbitmq_user:/var/lib/rabbitmq
+    environment:
+      - RABBITMQ_DEFAULT_USER=pcassa2233
+      - RABBITMQ_DEFAULT_PASS=Aa123123
+    ports:
+      - "5673:5672"
+      - "15673:15672"
+
+  user_microservice:
+    hostname: user_m
+    build: user_microservice
+    depends_on:
+      - rabbit
+      - db
+      - redis
+    ports:
+      - "8000:8000"
+      - "587"
+
+  celery_worker_user:
+    build: ./user_microservice
+    command: celery -A amqp_service.celery_app.celery_app worker --loglevel=info
+    depends_on:
+      - rabbit
+      - redis
+      - user_microservice
+
+  celery_worker_order:
+    build: ./order_microservice
+    command: celery -A amqp_service.celery_app.celery_app worker --loglevel=info
+    depends_on:
+      - rabbit
+      - redis
+      - order_microservice
+
+  celery_flower_user:
+    build: ./user_microservice
+    command: celery -A amqp_service.celery_app.celery_app flower --port=5555
+    depends_on:
+      - rabbit
+      - redis
+      - user_microservice
+    ports:
+      - "5555:5555"
+
+  tariff_microservice:
+    hostname: tariff_m
+    build: tariff_microservice
+    depends_on:
+      - db
+    ports:
+      - "8001:8001"
+
+  order_microservice:
+    hostname: order_m
+    build: order_microservice
+    depends_on:
+      - db
+      - rabbit
+    ports:
+      - "8002:8002"
+      - "587"
+
+  license_microservice:
+    hostname: license_m
+    build: license_microservice
+    depends_on:
+      - db
+    ports:
+      - "8003:8003"
+
+  admin_microservice:
+    hostname: admin_m
+    build: admin_microservice
+    depends_on:
+      - db
+    ports:
+      - "8004:8004"
+
+
+  db:
+    hostname: db
+    image: postgres:15.1-alpine
+    environment:
+      - POSTGRES_USER=pcassa
+      - POSTGRES_PASSWORD=1234
+      - POSTGRES_DB=newest
+    volumes:
+      - postgres_user:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:3.2.8
+    hostname: redis
+
+  nginx-reverse-proxy:
+    image: nginx:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./nginx_config.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - user_microservice
+      - license_microservice
+      - tariff_microservice
+      - order_microservice
+      - admin_microservice
+
+
+volumes:
+  postgres_user:
+  rabbitmq_user:
+
+
